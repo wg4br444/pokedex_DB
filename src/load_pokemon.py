@@ -6,9 +6,9 @@ import pymysql
 with open("/home/gabriel/Documentos/pokedex_DB/config/db_config.json") as f:
     config = json.load(f)
 
-#Function para encontrar o pokemon
-def get_pokemon(name: str):
-    url = f"https://pokeapi.co/api/v2/pokemon/{name.lower()}"
+#Função para buscar Pokémon por nome ou ID
+def get_pokemon(identifier):
+    url = f"https://pokeapi.co/api/v2/pokemon/{identifier}"
     response = requests.get(url)
     response.raise_for_status()
     return response.json()
@@ -23,28 +23,39 @@ connection = pymysql.connect(
 )
 cursor = connection.cursor()
 
+#Quantos Pokemons vamos trazer por vez?
+N = 5
+
 try:
+    #Pega o último ID inserido
+    cursor.execute("SELECT MAX(id) as last_id FROM pokemons_raw")
+    result = cursor.fetchone()
+    last_id = result["last_id"]
 
-    #Aqui futuramente vou automatizar ou criar interação para que busque sem alterar o código toda vez
-    pokemon = get_pokemon("Flygon")
+    #Se a tabela estiver vazia, começa do #1
+    if last_id is None:
+        next_id = 1
+    else:
+        next_id = last_id + 1
 
-    #Extrai dados exigidos na table pokemon_raw
-    poke_id = pokemon["id"]
-    poke_name = pokemon["name"]
-    raw_json = json.dumps(pokemon)
+    #Loop que insere N Pokemons de acordo com definido acima
+    for i in range(N):
+        pokemon = get_pokemon(next_id)
 
-    #Insert no banco
-    sql = """
-        INSERT INTO pokemons_raw (id, name, raw_data)
-        VALUES (%s, %s, %s)
-        ON DUPLICATE KEY UPDATE 
-            name = VALUES(name), 
-            raw_data = VALUES(raw_data)
-    """
-    cursor.execute(sql, (poke_id, poke_name, raw_json))
-    connection.commit()
+        poke_id = pokemon["id"]
+        poke_name = pokemon["name"]
+        raw_json = json.dumps(pokemon)
 
-    print(f"{poke_name.capitalize()} inserido/atualizado com sucesso!")
+        sql ="""
+            INSERT INTO pokemons_raw (id, name, raw_data)
+            VALUES (%s, %s, %s)
+            """
+        cursor.execute(sql, (poke_id, poke_name, raw_json))
+        connection.commit()
+
+        print(f"{poke_name.capitalize()} (id={poke_id}) inserido/atualizado com sucesso!")
+
+        next_id += 1  #Próximo Pokemon
 
 except Exception as e:
     print(f"Erro: {e}")
